@@ -185,7 +185,7 @@ class MDLegislationScraper(LegislationScraper):
                                 end_of_bills = 1
                                 break
                         logger.debug("Title of hte page: %s", title_tag.string)
-                        bill_number = bill_number + 500
+                        bill_number = bill_number + 1
                         self.get_bill_info(soup, short_code+bill_number_str, chamber, year)
 
 
