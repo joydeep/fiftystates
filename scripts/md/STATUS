@@ -1,9 +1,9 @@
 [Maryland]
 start_year: 1996
 bills: yes
-bill_versions: no
+bill_versions: yes
 sponsors: yes
 actions: yes
-votes: no
+votes: yes
 contributors: Joy Deep Nath
 notes:
