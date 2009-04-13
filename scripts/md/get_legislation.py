@@ -45,34 +45,56 @@ class MDLegislationScraper(LegislationScraper):
         def extract_bill_versions(self, bill_soup):
                 '''Extracts the versions of the Bill'''
                 #the versions of the bills are all stored as - 
-                # http://mlis.state.md.us/YYYYrs/bills
+                # http://mlis.state.md.us/YYYYRS/bills
                 #doing a findAll on links with '/bills/ we get a taglist
-                a_taglist= bill_soup.findAll(href=re.compile('/bills/'))
+                a_taglist = bill_soup.findAll(href=re.compile('/bills/'))
                 #the first a href tag is generally the Final bill version's tag 
                 #which also appears at the last incase the bill is passed
                 bill_versions=list()
                 tag = a_taglist[0]
-                bill_version=dict()
-                bill_version['name']=tag.string
-                bill_version['url']=tag.attrs[0][1]
+                bill_version = dict()
+                bill_version['name'] = tag.string
+                bill_version['url'] = tag.attrs[0][1]
                 bill_versions.append(bill_version)
                 del bill_version
                 for tag in a_taglist[1:]:
-                        bill_version=dict()
-                        bill_version=dict()
-                        bill_version['name']=tag.string
-                        bill_version['url']=tag.attrs[0][1]
+                        bill_version = dict()
+                        bill_version['name'] = tag.string
+                        bill_version['url'] = tag.attrs[0][1]
                         #handling duplicacy in the a_taglist
                         if bill_version['url'] == bill_versions[0]['url']:
-                                bill_versions[0]['name'] = bill_versions[0]['name']+' : '+bill_version['name']
+                                bill_versions[0]['name'] = bill_versions[0]['name'] + ' : ' + bill_version['name']
                         else:
                                 bill_versions.append(bill_version)
-                        print bill_version['name'], bill_version['url']
                         del bill_version
 
   
                 logger.debug("Found Bill Versions:%d", len(bill_versions))
                 return bill_versions
+        
+        def extract_bill_sponsors(self, bill_soup):
+                '''Extracts the sponsors of the Bill'''
+                #the name and links to the legislators who sopnsored the bills are stored as - 
+                # http://mlis.state.md.us/YYYYRD/sponsors/...
+                #doing a findAll on links with '/sponsors/ we get a taglist
+                a_taglist= bill_soup.findAll(href=re.compile('/sponsors/'))
+                #the first a href tag is generally the Final bill version's tag 
+                #which also appears at the last incase the bill is passed
+                sponsors=list()
+                for tag in a_taglist:
+                        sponsor=dict()
+                        #the string in sponsor's tag also contains the designation and district the sponsor belongs to
+                        # Delegate Thomas M. Carlyle, District 8
+                        sponsor['title'] = ''.join(tag.string.split(' ')[0])
+                        sponsor['name'] = tag.string
+                        sponsor['constituency'] = ' '.join(tag.string.split(' ')[-2:])
+                        sponsor['url'] = tag.attrs[0][1]
+                        sponsors.append(sponsor)
+                        del sponsor
+
+  
+                logger.debug("Found Sponsors:%d", len(sponsors))
+                return sponsors
 
 
         def get_bill_info(self, bill_soup, bill_id, chamber , year):
@@ -84,7 +106,6 @@ class MDLegislationScraper(LegislationScraper):
 
                 session = 426 + (int(year)-2009)
                 bill_title =  self.extract_bill_title(bill_soup)
-                print bill_title
                 #MD has one session per year; 2009 is the 426th session
                 self.add_bill(chamber, session, bill_id, bill_title)
                 
@@ -96,6 +117,7 @@ class MDLegislationScraper(LegislationScraper):
                 # first reading, a third reading and ammendments
                 # Get them all, and loop over
                 # the results, adding each one.
+                # The version links are all PDFs
 
                 bill_versions = self.extract_bill_versions(bill_soup)
                 base_url='http://mlis.state.md.us'
@@ -108,14 +130,18 @@ class MDLegislationScraper(LegislationScraper):
                 # MD doesnt specify any particular name to the sponsor, Hence, making
                 # an assumption that the first person on the liit is the primary sponsor
                 # Everyone else listed will be added as a 'cosponsor'.
+                # TODO: Add additional sponsor information like title (Senator/Delegate) and constituency (District #)
+
+                
+                sponsors = self.extract_bill_sponsors(bill_soup)
+                primary_sponsor_name = sponsors[0]['name']
+                cosponsors = sponsors[1:]
+                self.add_sponsorship(chamber, session, bill_id, 'primary', primary_sponsor_name)
+                for leg in cosponsors:
+                        self.add_sponsorship(chamber, session, bill_id, 'cosponsor', leg['name'])
 
                 '''
-                sponsors = self.extract_bill_sponsors(bill_soup)
-                primary_sponsor = sponsors[0]
-                cosponsors = sponsors[1:]
-                self.add_sponsorship(chamber, session, bill_id, 'primary', primary_sponsor)
-                for leg in cosponsors:
-                        self.add_sponsorship(chamber, session, bill_id, 'cosponsor', leg)
+
 
                 # Add Actions performed on the bill.
                 bill_actions = self.extract_bill_actions(bill_soup, chamber)
@@ -151,7 +177,6 @@ class MDLegislationScraper(LegislationScraper):
                         bill_number_str = str(bill_number)
                         bill_number_str = '0'*(4-len(bill_number_str)) + bill_number_str
                         url = 'http://mlis.state.md.us/%srs/billfile/%s%s.htm'%(year, short_code, bill_number_str)
-                        print url
                         logger.debug("Getting bill data from: %s", url)
                         data = urllib.urlopen(url).read()
                         soup = BeautifulSoup(data)
